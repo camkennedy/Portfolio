@@ -1,3 +1,5 @@
+# This repository under development, but hoping to have it complete in a few weeks.
+
 # Cameron's Portfolio of Public Projects
 This repository showcases some of the more interesting technical projects I've developed that can be shared publicly, highlighting data science and analytics solutions to business problems.
 
