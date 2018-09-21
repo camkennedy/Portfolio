@@ -11,5 +11,14 @@ For more information, please see my [resume](https://github.com/camkennedy/Portf
 # Summary of Projects
 
 | Project Description | Outcomes | Key Technologies |
-|-|-|-|
+|:-|:-|:-|
 |**Russian Tweet Prediction**<br>Natural language processing project to detect genuine vs. Russian misinformation campaign in the 2016 US election.</br><img width=200/>|99% accurate prediction model|<ul><li>LSTM Neural Network</li><li>TensorFlow</li><li>Python</li><li>SQL</li></ul><img width=500/>|
+|**Subscription Music Service Customer Churn**<br>TBD|||
+|**TBD**<br>TBD|TBD|TBD|
+|**TBD**<br>TBD|TBD|TBD|
+|**TBD**<br>TBD|TBD|TBD|
+|**TBD**<br>TBD|TBD|TBD|
+|**TBD**<br>TBD|TBD|TBD|
+|**TBD**<br>TBD|TBD|TBD|
+|**TBD**<br>TBD|TBD|TBD|
+|**TBD**<br>TBD|TBD|TBD|
