@@ -12,7 +12,7 @@ For more information, please see my [resume](https://github.com/camkennedy/Portf
 
 | Project Description | Outcomes | Key Technologies / Methods |
 |:-|:-|:-|
-|**Russian Tweet Prediction**<br>Natural language processing project to detect genuine vs. Russian misinformation campaign tweets in the 2016 US election.</br><img width=100/>|<ul><li>99% accurate prediction model</li><li>Research report with complete findings</li></ul>|<ul><li>LSTM Neural Network</li><li>TensorFlow</li><li>Python</li><li>SQL</li></ul><img width=500/>|
+|**Russian Tweet Prediction**<br>Natural language processing project to identify Russian political troll-bots on Twitter in the 2016 US election.</br><img width=100/>|<ul><li>99% accurate prediction model</li><li>Research report with complete findings</li></ul>|<ul><li>LSTM Neural Network</li><li>TensorFlow</li><li>Python</li><li>SQL</li></ul><img width=500/>|
 |**Predicting Customer Churn for a Subscription Music Service**<br>TBD|TBD|TBD|
 |**Medicare Cost Analysis**<br>TBD|TBD|TBD|
 |[**R Data Summarization and Feature Extraction**](https://github.com/camkennedy/Portfolio/tree/master/R_FeatureExtraction)<br>This example creates multiple summaries of data from a large table using parameters from another (usually much smaller) table. It features a non-equi join, allowing summary data to be extracted efficiently from multiple, simultaneous conditions. This technique can then be used either to generate quick summaries of data, or in feature extraction as part of a larger machine learning exercise. It's not a project like the others on this list; instead, it's a code snippet I find very useful!|Efficient summarization of data without creating an interim table|<ul><li>R</li><li>data.table library</li><li>Non-equi join</li></ul>|
