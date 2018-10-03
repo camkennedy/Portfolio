@@ -1,4 +1,4 @@
-# Russian Tweet Prediction
+# Russian Troll Tweet Prediction
 
 The files in this directory contain the research paper, presentation, and code for this project.  Code files are named as follows:
 
