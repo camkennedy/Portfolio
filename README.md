@@ -1,4 +1,4 @@
-# Cameron's Portfolio of Public Projects
+# Cameron's Data Science and Analytics Portfolio of Public Projects
 This repository showcases some of the more interesting technical projects I've developed that can be shared publicly, highlighting data science and analytics solutions to business problems.
 
 ## About the Author
