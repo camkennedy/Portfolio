@@ -10,7 +10,7 @@ For more information, please see my [resume](https://github.com/camkennedy/Portf
 
 # Summary of Projects
 
-| Project Description | Outcomes | Key Technologies / Methods |
+| Project Description | Notable Outcomes | Key Technologies / Methods |
 |:-|:-|:-|
 |[**Russian Troll Tweet Prediction**](https://github.com/camkennedy/Portfolio/tree/master/RussianTweetPrediction)<br>Natural language processing project to identify Russian political troll-bots on Twitter in the 2016 US election. The technical highlight was concatenating tweet metadata to the LSTM output, then piping the combined data through additional neural network layers.|<ul><li>99% accuracy</li><li>Increased accuracy from 96% baseline using LSTM alone</li><li>[Research report with complete findings](https://github.com/camkennedy/Portfolio/blob/master/RussianTweetPrediction/Project%20Final%20Paper.pdf)</li></ul>|<ul><li>LSTM Neural Network</li><li>TensorFlow</li><li>Python</li><li>SQL</li></ul>|
 |[**Predicting Customer Churn for a Subscription Music Service**](https://github.com/camkennedy/Portfolio/tree/master/MusicServiceChurn)<br>This analysis uses machine learning to predict customer churn for a large music subscription serivce.|<ul><li>97% accuracy</li><li>78% recall</li><li>Economic model to optimze spending amount by customer to prevent churn</li></ul>|<ul><li>XGBoost (best results; Random Forest, SVM, and other models used too)</li><li>Scikit-Learn</li><li>Python</li><li>SQL</li></ul>|
