@@ -10,6 +10,8 @@ For more information, please see my [resume](https://github.com/camkennedy/Portf
 
 # Summary of Projects
 
+_Click project name for code, reports, and presentations._
+
 | Project Description | Notable Outcomes | Key Technologies / Methods |
 |:-|:-|:-|
 |[**Russian Troll Tweet Prediction**](https://github.com/camkennedy/Portfolio/tree/master/RussianTweetPrediction)<br>Natural language processing project to identify Russian political troll-bots on Twitter in the 2016 US election. The technical highlight was concatenating tweet metadata to the LSTM output, then piping the combined data through additional neural network layers.|<ul><li>99% accuracy</li><li>Increased accuracy from 96% baseline using LSTM alone</li><li>[Research report with complete findings](https://github.com/camkennedy/Portfolio/blob/master/RussianTweetPrediction/Project%20Final%20Paper.pdf)</li></ul>|<ul><li>LSTM Neural Network</li><li>TensorFlow</li><li>Python</li><li>SQL</li></ul>|
