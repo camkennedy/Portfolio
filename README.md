@@ -6,7 +6,7 @@ Cameron is a graduate student at the University of California, Berkeley, pursuin
 
 For more information, please see my [resume](https://github.com/camkennedy/Portfolio/blob/master/Resume_Coming_Soon.txt) (*coming soon!*), or visit my [LinkedIn profile](https://www.linkedin.com/in/cameron-kennedy-a936283/).
 
-# Summary of Projects
+# Projects
 
 _Click project name for code, reports, and presentations._
 
