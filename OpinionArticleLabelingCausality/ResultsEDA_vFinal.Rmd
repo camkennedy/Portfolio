@@ -1,0 +1,491 @@
+---
+title: "Exploratory Data Analysis for Opinion Labeling in News Articles"
+subtitle: "W241, Experiments and Causality | Spring 2019 | Final Project"
+author: "Authors: Craig Fujii, Tako Hisada, Cameron Kennedy"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Introduction
+
+This notebook is designed to take the output of the data preparation, using the file `POSurveyData.csv` with potential outcomes from the raw survey results as its input data, and performing exploratory data analysis to descriptively and visually understand the results.
+
+This notebook does not contain any inferential statistical analysis, as that is contained in a separate notebook.
+
+The input of this notebook is as follows:
+
+* **Input:**
+    * **POSurveyData.csv**: The csv file that is the output of the data preparation. It contains the potential outcomes.
+
+```{r, results='hide'} 
+#Clear the environment
+rm(list=ls())
+
+# load packages 
+library(tidyverse)
+library(data.table)
+library(ggplot2)
+```
+
+# Load Data
+
+This block loads the data and performs some basic preparation.
+
+```{r}
+#Set data folder and filename
+cstDataFolder <- './data/' #cst for 'constant'
+#cstDataFile <- 'POSurveyData.csv'
+cstDataFile <- 'POSurveyData.rds'
+
+#Load response data
+# dt <- fread(file=paste(cstDataFolder, cstDataFile, sep=''),
+#             header=T
+#             )
+
+dt <- readRDS(file=paste(cstDataFolder, cstDataFile, sep=''))
+
+#Inspect the data - Commented out to save space when printing
+#dt[sample(.N,10)]
+```
+
+# Basic Counts
+
+```{r}
+#Commented out to save time/space
+#summary(dt, maxsum=10) #maxsum: integer, indicating how many levels should be shown for factors.
+```
+
+# Duration
+
+```{r}
+#Convert seconds to minutes
+dt[, Duration:=Duration/60]
+
+#Group, then summarize
+dtDur <- dt[, .(Duration=mean(Duration)), by=.(userID,Source)]
+hist(dtDur$Duration, breaks=c(0:40))
+summary(dtDur)
+
+
+```
+
+```{r}
+dtDur[, .(mean=mean(Duration), med=median(Duration)), keyby=Source]
+```
+
+# Plotting Strategy
+
+Look at our outcome variables for all level 1 possibilities of covariates.
+
+* Tone
+* Intensity
+* Factualness
+
+And these are covariates to explore:
+
+* Gender
+* Age
+* Completion time (need to generate)
+* Race
+* Income
+* Education
+* Political Views
+* Political Party
+* Interest in Politics
+* Number of Correct Political Battery Questions
+* Reddit Usage
+* Other Social Media Usage
+* Article Topic
+* Article Conservative/Liberal
+* Flight Order
+
+Key Covariates to ignore:
+
+* Registered to Vote
+
+```{r}
+#Eliminate those who failed 1 or more attention checks
+dt <- dt[AC_Num_Correct==4]
+```
+
+# Diverging Bar Plots
+
+```{r}
+### Percentage Response Charts
+
+PlotDivBar <- function(varIn) {
+
+  for (depVar in c('tone','intensity','fact')) {
+
+    #Wrangle data into plot format
+    dtPlot <- dt[, .N, keyby=.(newsOp,Treatment,demoVar=get(varIn),dv=get(depVar))]
+    dtPlot[, pctCount:=N/sum(N), by=.(newsOp,Treatment,demoVar)]
+    
+    #Eliminate blanks
+    dtPlot <- dtPlot[demoVar!='']
+    
+    #Create legend labels to include N-Size.
+    dtN <- dtPlot[, .(N=sum(N)), keyby=.(demoVar)]
+    dtN[, labelWithN:=paste(demoVar, '\n(N=', N, ')', sep='')]
+    newLabels <- dtN$labelWithN
+    names(newLabels) <- dtN$demoVar
+    #return(dtN)
+    
+    if (depVar=='tone') {
+      #Make Negatives for Left Categories
+      dtPlot[dv=='01_Very Liberal', pctCount := -pctCount]
+      dtPlot[dv=='02_Liberal', pctCount := -pctCount]
+      dtPlot[dv=='03_Slightly Liberal', pctCount := -pctCount]
+      
+      #Split Center Category
+      dtPlot[dv=='04_Neutral', pctCount := 0.5*pctCount] #Cut in half
+      dtFlipCenter <- dtPlot[dv=='04_Neutral']
+      dtFlipCenter[, pctCount := -pctCount]
+      dtPlot <- rbind(dtPlot, dtFlipCenter)
+      
+      #Set plotting parameters
+      lowerBound <- -1
+      dvTitle <- 'Political Tone'
+      legTitle <- 'Political Tone'
+      colorPal <- 'RdBu'
+      colorRev <- -1
+    }
+    
+    if (depVar=='intensity') {
+      # <no negative values required>
+  
+      #Set plotting parameters
+      lowerBound <- 0
+      dvTitle <- 'Political Intensity'
+      legTitle <- 'Political\nIntensity'
+      colorPal <- 'BuPu'
+      colorRev <- -1
+    }
+    
+    if (depVar=='fact') {
+      #Make Negatives for Left Categories
+      dtPlot[dv=='01_Mostly factual', pctCount := -pctCount]
+      dtPlot[dv=='02_Somewhat factual', pctCount := -pctCount]
+      
+      #Set plotting parameters
+      lowerBound <- -1
+      dvTitle <- 'Factualness'
+      legTitle <- 'Factualness'
+      colorPal <- 'RdGy'
+      colorRev <- -1
+    }
+    
+    #Notes:
+      #This requires making two bar plots, one for the pos + one for the neg, hence
+        #the two geom_bar calls.
+      #`fct_rev` from tidyverse is handy, used to reverse the order of factor levels
+    
+    for (articleType in c('News','Opinion')) {
+      pa <- ggplot() +
+        geom_bar(data=dtPlot[newsOp==articleType & pctCount>=0],
+                 mapping=aes(x=Treatment, y=pctCount, fill=fct_rev(dv)),
+                 color='black',
+                 stat='identity',
+                 position='stack',
+                 width = 0.8) +
+        geom_bar(data=dtPlot[newsOp==articleType & pctCount<0],
+                 mapping=aes(x=Treatment, y=pctCount, fill=dv),
+                 color='black',
+                 stat='identity',
+                 position='stack',
+                 width = 0.8) +
+        coord_flip() +
+        facet_grid(demoVar~., switch='both', labeller=labeller(demoVar = newLabels)) +
+        scale_y_continuous(labels = scales::percent, limits = c(lowerBound, 1)) +
+        scale_fill_brewer(palette=colorPal, direction=colorRev, name=legTitle) +
+        theme(panel.spacing = unit(0.5, 'lines'),
+              strip.text.y = element_text(angle=180)
+              ) +
+        ggtitle(paste('Response Distribution: ', dvTitle, '\n',
+                      articleType, ' Articles', ' - Grouped by ', varIn,
+                          sep='')) +
+        ylab('Percent of Respondents')
+    
+    print(pa)
+    }
+  }
+  #return(dtPlot)
+}
+
+#Tasks
+  #DONE Make this a function!
+  #DONE x axis pctCount to friendly
+  #DONE x axis numbers to percentages
+  #DONE x axis fix scale
+  #DONE Title (Title, News/Op, Variable)
+  #DONE Legend Title
+  #DONE Legend N sizes
+  #DONE Reverse colors for tone (democrats should be blue, republicans red)
+  #DONE Change color for Political Intensity (green to red ... or maybe shades of all 1 color)
+  #DONE Change color for Factualness (green to red ... or maybe shades of all 1 color)
+```
+
+```{r}
+#Overall Plot
+PlotDivBar('Finished') #Proxy for 'Overall ATE'
+PlotDivBar('Source')
+```
+
+```{r}
+#A-plotting we well go!
+PlotDivBar('topicName')
+```
+
+```{r}
+PlotDivBar('age')
+```
+
+```{r}
+PlotDivBar('ArticleTone')
+PlotDivBar('ArticleClarity')
+PlotDivBar('gender')
+#PlotDivBar('race')
+#PlotDivBar('income')
+#PlotDivBar('education')
+PlotDivBar('pol_views')
+PlotDivBar('pol_party')
+PlotDivBar('Int_politics')
+#PlotDivBar('use_reddit')
+#PlotDivBar('use_soc_media')
+PlotDivBar('flightOrder')
+```
+
+# Plots for Presentation
+
+```{r, fig.height=3, fig.width=5.5}
+#Wrangle data into plot format
+dtPlot <- dt[, .N, keyby=.(newsOp,Treatment,demoVar=get('Finished'),dv=get('fact'))]
+dtPlot[, pctCount:=N/sum(N), by=.(newsOp,Treatment,demoVar)]
+
+#Eliminate blanks
+dtPlot <- dtPlot[demoVar!='']
+
+#Create legend labels to include N-Size.
+dtN <- dtPlot[, .(N=sum(N)), keyby=.(demoVar)]
+dtN[, labelWithN:=paste(demoVar, '\n(N=', N, ')', sep='')]
+newLabels <- dtN$labelWithN
+names(newLabels) <- dtN$demoVar
+#return(dtN)
+
+
+#Make Negatives for Left Categories
+dtPlot[dv=='01_Mostly factual', pctCount := -pctCount]
+dtPlot[dv=='02_Somewhat factual', pctCount := -pctCount]
+
+#Set plotting parameters
+lowerBound <- -1
+dvTitle <- 'Factualness'
+legTitle <- 'Factualness'
+colorPal <- 'RdGy'
+colorRev <- -1
+
+
+#Notes:
+#This requires making two bar plots, one for the pos + one for the neg, hence
+  #the two geom_bar calls.
+#`fct_rev` from tidyverse is handy, used to reverse the order of factor levels
+
+articleType <- 'Opinion'
+pa <- ggplot() +
+geom_bar(data=dtPlot[newsOp==articleType & pctCount>=0],
+         mapping=aes(x=Treatment, y=pctCount, fill=fct_rev(dv)),
+         color='black',
+         stat='identity',
+         position='stack',
+         width = 0.8) +
+geom_bar(data=dtPlot[newsOp==articleType & pctCount<0],
+         mapping=aes(x=Treatment, y=pctCount, fill=dv),
+         color='black',
+         stat='identity',
+         position='stack',
+         width = 0.8) +
+coord_flip() +
+#facet_grid(demoVar~., switch='both', labeller=labeller(demoVar = newLabels)) +
+scale_y_continuous(labels = scales::percent, limits = c(-0.25,0.9)) +
+scale_fill_brewer(palette=colorPal, direction=colorRev, name=legTitle) +
+theme(panel.spacing = unit(0.5, 'lines'),
+      strip.text.y = element_text(angle=180),
+      legend.position='bottom'
+      ) +
+ggtitle(paste('Response Distribution: Factualness', '\n',
+              articleType, ' Articles (N=3,712)',
+                  sep='')) +
+ylab('Percent of Respondents')
+
+pa <- pa + guides(fill=guide_legend(ncol=2,nrow=2,byrow=TRUE))
+
+print(pa)
+```
+
+# ATE Bar Plots (no longer using, in favor of plots above)
+
+```{r, fig.width=12}
+
+# #Plot function
+# PlotATE <- function(varIn) {
+#   
+#   #Wrap in for loop for tone, intensity, and factualness
+#   for (depVar in c('tone','intensity','fact')) {
+#     
+#     #Wrangle data into plot format
+#     dtPlot <- dt[, .N, keyby=.(newsOp,Treatment,demoVar=get(varIn),dv=get(depVar))]
+#     dtPlot[, pctCount:=N/sum(N), by=.(newsOp,Treatment,demoVar)]
+#     
+#         #Eliminate blanks
+#     dtPlot <- dtPlot[demoVar!='']
+#     
+#     #Create legend labels to include N-Size.
+#     #Pattern: c("Female" = "F", "Male" = "M", "Othedr" = "O")
+#     dtN <- dtPlot[, .(N=sum(N)), keyby=.(demoVar)]
+#     dtN[, labelWithN:=paste(demoVar, '\n(N=', N, ')', sep='')]
+#     newLabels <- dtN$labelWithN
+#     names(newLabels) <- dtN$demoVar
+#     
+#     #Tall to wide (to set up subtracting ATEs)
+#     dtPlot <- dcast(dtPlot,
+#                     newsOp+demoVar+dv~Treatment,
+#                     value.var='pctCount',
+#                     fill=0
+#                     )
+#     
+#     #Debugging-DELETE!!!!!!!!
+#     #return(dtPlot)
+#     
+#     #Calculate ATE
+#     dtPlot[, ATE:=Labeled-Unlabeled]
+#     
+#     #Rename demoVar and dv
+#     setnames(dtPlot, old='demoVar', new=varIn)
+#     setnames(dtPlot, old='dv', new=depVar)
+#     
+#     #Set Plot Title
+#     if (depVar=='tone') {dvTitle <- 'Political Tone'}
+#     if (depVar=='intensity') {dvTitle <- 'Political Intensity'}
+#     if (depVar=='fact') {dvTitle <- 'Perceived Factualness'}
+#     
+#     #Generate plots, one for news and one for opinion
+#     for (articleType in c('News','Opinion')) {
+#       pa <- ggplot(dtPlot[newsOp==articleType], aes_string(y='ATE', x=varIn, fill=varIn)) +
+#           geom_bar(position="dodge", stat="identity", color="black") +
+#           facet_grid(cols=vars(get(depVar))) +
+#           theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+#                 legend.position="bottom"
+#                 ) +
+#           scale_fill_brewer(palette="Blues", labels=newLabels) +
+#           #scale_fill_discrete(labels=newLabels) +
+#           ggtitle(paste('Average Treatment Effect: ', dvTitle, ', ', articleType, ' Articles\n', 
+#                         'Grouped by ', varIn,
+#                         sep=''))  
+#       
+#       print(pa)
+#     }
+#   }
+#   
+#   #Used for debugging
+#   #return(dtPlot)
+# }
+# 
+# #Debugging
+# #dtDebug <- PlotATE('gender')
+# ```
+# 
+# ```{r}
+# #A-plotting we well go!
+# PlotATE('Finished') #Proxy for 'Overall ATE'
+# PlotATE('gender')
+# PlotATE('age')
+# PlotATE('race')
+# PlotATE('income')
+# PlotATE('education')
+# PlotATE('pol_views')
+# PlotATE('pol_party')
+# PlotATE('Int_politics')
+# PlotATE('use_reddit')
+# PlotATE('use_soc_media')
+# dt[, flightOrder:=as.factor(flightOrder)] #Plot function expects a factor
+# PlotATE('flightOrder')
+# PlotATE('topicName')
+
+```
+
+# Doodling
+
+Everything from here below is just me playing with functions to learn them and explore.
+
+```{r}
+# #Key Y
+# # tone
+# # fact
+# # intensity
+# 
+# 
+# #Key X
+# # treat
+# # topicName
+# # newsOp
+# 
+# #Counts of tone by treat and newsOp
+# dcast(dt[, .N, keyby=.(treat, tone, newsOp)], 
+#       tone~treat+newsOp,
+#       value.var='N'
+#       )
+# 
+# #Counts of fact by treat and newsOp
+# dcast(dt[, .N, keyby=.(treat, fact, newsOp)], 
+#       fact~treat+newsOp,
+#       value.var='N'
+#       )
+# 
+# #Counts of intensity by treat and newsOp
+# dcast(dt[, .N, keyby=.(treat, intensity, newsOp)], 
+#       intensity~treat+newsOp,
+#       value.var='N'
+#       )
+
+```
+
+```{r}
+# #Plot ATE, treat vs. not treat, 1 for news, 1 for op
+# 
+# dtPlot <- dt[, .(count=.N), keyby=.(treat, tone)]
+# 
+# ggplot(data=dtPlot, aes(x=tone, y=count, col=factor(treat), group=factor(treat))) +
+#    geom_line()+
+#    geom_point()+
+#    ggtitle(paste('Probability Mass Function\n','strSubtitle',sep='')) +
+#    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+
+```{r}
+# ### TESTING PLOTS, ETC.
+# 
+# #Get counts and percentages
+# dtPlot <- dt[, .N, keyby=.(newsOp,Treatment,FL_4_DO,tone)]
+# dtPlot[, pctCount:=N/sum(N), by=.(newsOp,Treatment,FL_4_DO)]
+# #dtPlot
+# 
+# dtPlot <- dcast(dtPlot,
+#                 newsOp+FL_4_DO+tone~Treatment,
+#                 value.var='pctCount',
+#                 fill=0
+#                 )
+# dtPlot[, ATE:=Labeled-Unlabeled]
+# #dtPlot
+# 
+# ggplot(dtPlot, aes(y=ATE, x=tone, fill=FL_4_DO)) + 
+#     geom_bar(position="dodge", stat="identity") +    
+#     facet_wrap(~newsOp)
+# 
+# ggplot(dtPlot[newsOp=='News'], aes(y=ATE, x=FL_4_DO, fill=FL_4_DO)) + 
+#     geom_bar(position="dodge", stat="identity") +    
+#     facet_wrap(~tone)
+
+```

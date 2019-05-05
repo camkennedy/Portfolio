@@ -1,0 +1,331 @@
+---
+title: "Statistical Analysis for Opinion Labeling in News Articles"
+subtitle: "W241, Experiments and Causality | Spring 2019 | Final Project"
+author: "Authors: Craig Fujii, Tako Hisada, Cameron Kennedy"
+output:
+  html_document: default
+  pdf_document: default
+classoption: landscape
+---
+
+# Introduction
+
+This notebook runs the statistical analysis of the experiment, featuring the `polr` (proportional odds logistic regression) function to determine statistical significance of the survey results.
+
+The input of this notebook is as follows:
+
+* **Input:**
+    * **POSurveyData.csv**: The csv file that is the output of the data preparation. It contains the potential outcomes.
+
+```{r, results='hide'} 
+#Clear the environment
+rm(list=ls())
+
+# load packages 
+library(data.table)
+library(MASS)
+library(ggplot2)
+library(dplyr)
+library(stargazer)
+
+#Set global variables
+stargazerOutput <- 'text'
+#stargazerOutput <- 'latex'
+#stargazerOutput <- 'html'
+```
+
+# Load Data
+
+This block loads the data and performs some basic preparation.
+
+```{r}
+#Set data folder and filename
+cstDataFolder <- './data/' #cst for 'constant'
+cstDataFile <- 'POSurveyData.rds'
+
+dt <- readRDS(file=paste(cstDataFolder, cstDataFile, sep=''))
+
+#Eliminate those who failed 1 or more attention checks
+#Comment this line out to see all responses
+dt <- dt[AC_Num_Correct==4]
+
+#Inspect the data - Commented out to save space when printing
+#dt[sample(.N,10)]
+```
+
+# Official Experiment Results
+
+Prior to running the results, the research team agreed to conduct only two primary experiments:
+
+  1. Opinion Articles, Factualness
+
+  2. Opinion Articles, Intensity
+
+The decision to not run more experiments was made on the basis of answering the original research question and also looking at the pilot results which showed little difference in outcomes among the covariates in the experiment.  
+
+The next major section contains additional analyses that are 'fishing' for additional findings, but that are not considered among the official results.
+
+## Experiments 1 and 2:  Intensity and Factualness, Opinion Articles
+
+```{r, results='asis'}
+### Opinion Models ###
+newsOpValue <- 'Opinion'
+
+### INTENSITY ###
+
+#Dependent variable with treatment only
+modIOSolo <- polr(intensity ~ treat, 
+                  data=dt[newsOp==newsOpValue],
+                  Hess=T)
+#Grab t-value
+modIOSolo_tValue <- coef(summary(modIOSolo))['treat1','t value']
+
+#Calculate p-value
+modIOSolo_pValue <- pt(abs(modIOSolo_tValue), nobs(modIOSolo), lower.tail = F) * 2
+
+#DV with article clarity, tone, and MTurk Political View
+modIOArtClarTone <- polr(intensity ~ treat + ArticleClarity + ArticleTone + MturkPolView,
+                         data=dt[newsOp==newsOpValue],
+                         Hess=T)
+
+#DV with article topic
+modIOTopic <- polr(intensity ~ treat + MturkPolView + topicName,
+                   data=dt[newsOp==newsOpValue],
+            Hess=T)
+
+#Kitchen Sink (a bunch of covariates)
+modIOKitchen <- polr(intensity ~ treat + ArticleClarity + ArticleTone + MturkPolView +
+                       factor(userID) +
+                       Int_politics + pol_party + age + gender + income +
+                       use_reddit + use_soc_media,
+                     data=dt[newsOp==newsOpValue],
+                     Hess=T)
+
+
+### FACTUALNESS ###
+
+#Dependent variable with treatment only
+modFOSolo <- polr(fact ~ treat, 
+                  data=dt[newsOp==newsOpValue],
+                  Hess=T)
+#Grab t-value
+modFOSolo_tValue <- coef(summary(modFOSolo))['treat1','t value']
+
+#Calculate p-value
+modFOSolo_pValue <- pt(abs(modFOSolo_tValue), nobs(modFOSolo), lower.tail = F) * 2
+
+#DV with article clarity, tone, and MTurk Political View
+modFOArtClarTone <- polr(fact ~ treat + ArticleClarity + ArticleTone + MturkPolView,
+                         data=dt[newsOp==newsOpValue],
+                         Hess=T)
+
+#DV with article topic
+modFOTopic <- polr(fact ~ treat + MturkPolView + topicName,
+                   data=dt[newsOp==newsOpValue],
+            Hess=T)
+
+#Kitchen Sink (a bunch of covariates)
+modFOKitchen <- polr(fact ~ treat + ArticleClarity + ArticleTone + MturkPolView +
+                       factor(userID) +
+                       Int_politics + pol_party + age + gender + income +
+                       use_reddit + use_soc_media,
+                     data=dt[newsOp==newsOpValue],
+                     Hess=T)
+
+#Compare models with stargazer
+stargazer(modIOSolo, modIOArtClarTone, modIOTopic, modIOKitchen,
+          modFOSolo, modFOArtClarTone, modFOTopic, modFOKitchen,
+          type=stargazerOutput,
+          omit = c('Int_politics','pol_party','gender','age','income',
+                   'use_reddit','use_soc_media','userID'),
+          add.lines = list(c('Data Subset','Opinion','Opinion','Opinion','Opinion'),
+                           c('Fixed Interest in Politics','No','No','No','Yes'),
+                           c('Fixed Surveyed Political Party','No','No','No','Yes'),
+                           c('Fixed Age','No','No','No','Yes'),
+                           c('Fixed Gender','No','No','No','Yes'),
+                           c('Fixed Income','No','No','No','Yes'),
+                           c('Fixed Reddit Usage','No','No','No','Yes'),
+                           c('Fixed Social Media Usage','No','No','No','Yes'),
+                           c('Fixed Subject (`userID`)','No','No','No','Yes')
+                           )
+          )
+```
+
+## Experiments 3 and 4:  Intensity and Factualness, News Articles
+
+```{r, results='asis'}
+### News Models ###
+newsOpValue <- 'News'
+
+### INTENSITY ###
+
+#Dependent variable with treatment only
+modIOSolo <- polr(intensity ~ treat, 
+                  data=dt[newsOp==newsOpValue],
+                  Hess=T)
+#Grab t-value
+modIOSolo_tValue <- coef(summary(modIOSolo))['treat1','t value']
+
+#Calculate p-value
+modIOSolo_pValue <- pt(abs(modIOSolo_tValue), nobs(modIOSolo), lower.tail = F) * 2
+
+#DV with article clarity, tone, and MTurk Political View
+modIOArtClarTone <- polr(intensity ~ treat + ArticleClarity + ArticleTone + MturkPolView,
+                         data=dt[newsOp==newsOpValue],
+                         Hess=T)
+
+#DV with article topic
+modIOTopic <- polr(intensity ~ treat + MturkPolView + topicName,
+                   data=dt[newsOp==newsOpValue],
+            Hess=T)
+
+#Kitchen Sink (a bunch of covariates)
+modIOKitchen <- polr(intensity ~ treat + ArticleClarity + ArticleTone + MturkPolView +
+                       factor(userID) +
+                       Int_politics + pol_party + age + gender + income +
+                       use_reddit + use_soc_media,
+                     data=dt[newsOp==newsOpValue],
+                     Hess=T)
+
+
+### FACTUALNESS ###
+
+#Dependent variable with treatment only
+modFOSolo <- polr(fact ~ treat, 
+                  data=dt[newsOp==newsOpValue],
+                  Hess=T)
+#Grab t-value
+modFOSolo_tValue <- coef(summary(modFOSolo))['treat1','t value']
+
+#Calculate p-value
+modFOSolo_pValue <- pt(abs(modFOSolo_tValue), nobs(modFOSolo), lower.tail = F) * 2
+
+#DV with article clarity, tone, and MTurk Political View
+modFOArtClarTone <- polr(fact ~ treat + ArticleClarity + ArticleTone + MturkPolView,
+                         data=dt[newsOp==newsOpValue],
+                         Hess=T)
+
+#DV with article topic
+modFOTopic <- polr(fact ~ treat + MturkPolView + topicName,
+                   data=dt[newsOp==newsOpValue],
+            Hess=T)
+
+#Kitchen Sink (a bunch of covariates)
+modFOKitchen <- polr(fact ~ treat + ArticleClarity + ArticleTone + MturkPolView +
+                       factor(userID) +
+                       Int_politics + pol_party + age + gender + income +
+                       use_reddit + use_soc_media,
+                     data=dt[newsOp==newsOpValue],
+                     Hess=T)
+
+#Compare models with stargazer
+stargazer(modIOSolo, modIOArtClarTone, modIOTopic, modIOKitchen,
+          modFOSolo, modFOArtClarTone, modFOTopic, modFOKitchen,
+          type=stargazerOutput,
+          omit = c('Int_politics','pol_party','gender','age','income',
+                   'use_reddit','use_soc_media','userID'),
+          add.lines = list(c('Data Subset','Opinion','Opinion','Opinion','Opinion'),
+                           c('Fixed Interest in Politics','No','No','No','Yes'),
+                           c('Fixed Surveyed Political Party','No','No','No','Yes'),
+                           c('Fixed Age','No','No','No','Yes'),
+                           c('Fixed Gender','No','No','No','Yes'),
+                           c('Fixed Income','No','No','No','Yes'),
+                           c('Fixed Reddit Usage','No','No','No','Yes'),
+                           c('Fixed Social Media Usage','No','No','No','Yes'),
+                           c('Fixed Subject (`userID`)','No','No','No','Yes')
+                           )
+          )
+```
+
+# Fishing! Exploring Relationships in Data Subsets
+
+## Function to Compute Stats for Demographic Subsets
+
+```{r, results='asis'}
+
+HTEbyDemo <- function(demoIn, dvIn='fact') {
+  print(paste0('DEMOGRAPHIC: ', demoIn))
+
+  for(newsOpValue in levels(dt[, newsOp])) {
+    print(newsOpValue)
+  
+    for (item in levels(dt[, factor(get(demoIn))])) {
+      #Dependent variable with treatment only
+      mod <- polr(get(dvIn) ~ treat,
+                  data=dt[newsOp==newsOpValue & factor(get(demoIn))==item],
+                  Hess=T)
+      
+      #Grab t-value, calculate p-value
+      mod_tValue <- coef(summary(mod))['treat1','t value']
+      #print(coef(summary(mod)))  #Verbose, good for debugging
+      mod_pValue <- pt(abs(mod_tValue), nobs(mod), lower.tail = F) * 2
+      print(paste0(newsOpValue, ' articles, Category: ', item, ' - p-value: ', mod_pValue))
+      
+      stargazer(mod, type=stargazerOutput, dep.var.labels = dvIn)
+      print('')
+      
+    }
+    print('')
+  }
+}
+
+```
+
+```{r, results='asis'}
+#HTEbyDemo('topicName','intensity')
+HTEbyDemo('age')
+#HTEbyDemo('MturkPolView')
+#HTEbyDemo('gender')
+#HTEbyDemo('income')
+#HTEbyDemo('Source')
+#HTEbyDemo('pol_party')
+```
+
+## Looking at Interaction Terms
+
+```{r}
+#Releveling the age variable to set 60-69 as a reference
+#because that group had the least ATE
+
+#dt[, .N, keyby=age]
+
+#dt <- within(dt, age <- relevel(age, ref = '60-69 years'))
+dt[, age:=relevel(age, ref = '60-69 years')]
+```
+
+```{r, results='asis'}
+### Opinion Models ###
+newsOpValue <- 'Opinion'
+
+#demoVar to try:
+# ArticleClarity
+# ArticleTone 
+# MturkPolView
+# Int_politics
+# pol_party
+# age
+# gender
+# income
+# use_reddit
+# use_soc_media
+
+demoVar <- 'age'
+
+#Dependent variable with treatment only
+modFOSolo <- polr(fact ~ treat, 
+            data=dt[newsOp==newsOpValue],
+            Hess=T)
+
+#Interaction Model 1
+modFOInt <- polr(fact ~ treat*get(demoVar),
+            data=dt[newsOp==newsOpValue],
+            Hess=T)
+
+#Compare models with stargazer
+stargazer(modFOSolo, modFOInt,
+          type=stargazerOutput
+          # omit = c('Int_politics','Source','pol_party',
+          #          'age','income','use_reddit',
+          #          'Source','income','userID'),
+          )
+```

@@ -1,0 +1,399 @@
+---
+title: "Data Preparation for Opinion Labeling in News Articles"
+subtitle: "W241, Experiments and Causality | Spring 2019 | Final Project"
+author: "Authors: Craig Fujii, Tako Hisada, Cameron Kennedy"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Introduction
+
+This notebook is designed to take the output of the raw survey data, starting from a .csv file plus some accompanying lookup tables (also .csv files), and transform them into a single table of potential outcomes that can then be statistcally analyzed in a separate notebook.  The input and output files are as follows:
+
+* **Inputs:**
+    * **rawSurveyData.csv**: A csv file with survey output from Qualtrics. This is the primary file in the analysis.
+    * **JoinQID.csv**: A csv file used as a lookup table to map the question ID (variable `qID`) to the article label, the topic ID, the news/opinion designation, and the treatment (unlabeled or labeled).
+    * **JoinTopicID.csv**: A csv file used as a lookup table to map the topic ID to topic name.
+
+* **Output:**
+    * **POSurveyData.csv**: A csv file containing the table of potential outcomes, treatments, and covariates to analyze.
+
+```{r, results='hide'} 
+#Clear the environment
+rm(list=ls())
+
+# load packages 
+library(data.table)
+
+#Set global parameters
+friendsAndFamily <- F
+attnChecks <- T
+useTestData <- F
+```
+
+# Load Data
+
+This block loads the data and performs some basic preparation.
+
+```{r}
+#Set data folder and filename
+cstDataFolder <- './data/' #cst for 'constant'
+
+#Select file to use (don't forget to check/change global parameters a few lines above)
+cstDataFile <- 'rawSurveyData.csv'
+#cstDataFile <- 'rawSurveyData_Pilot_rev5_Mturk.csv'
+
+#Load response data
+dtRaw <- fread(file=paste(cstDataFolder, cstDataFile, sep=''),
+               header=T
+               )
+
+#Delete rows 2 and 3 (extra header rows)
+dtRaw <- dtRaw[-(1:2)]
+
+#Add a user number
+dtRaw[, userID:=seq(.N)]
+
+#Filter only respondents who consent
+dtRaw <- dtRaw[welcome=='I consent, begin the study']
+
+#Filter only respondents who finished
+dtRaw <- dtRaw[Finished=='True']
+
+#Filter out early testing
+#dtRaw <- dtRaw[Source!=101010]
+
+#Use / don't use test data
+
+#Source codes to use if not testing:
+
+if (useTestData) {
+  fullRunSourceCodes <- c('101010','121212','131313')
+  dtRaw <- dtRaw[Source %in% fullRunSourceCodes]
+} else {
+  fullRunSourceCodes <- c('505050','707070','515151','717171','525252','727272',
+                        '535353','737373','303030','313131')
+  dtRaw <- dtRaw[Source %in% fullRunSourceCodes]
+}
+  
+#Inspect the data - Commented out to save space when printing
+#dtRaw[sample(.N,10)]
+```
+
+# Data Preparation: Scrunching
+
+This next code block performs a significant amoutn of data preparation.  Because of the multiple layers of article randomization in the survey, the raw survey data is spread across multiple columns, resulting in a sparse matrix where most cells contain blank values and those cells that contain data are only those that correspond to the randomization that occurred for any one user.
+
+```{r}
+KeepColsFx <- function(inputStr, keepCols) {
+  #Simple function that takes a string of comma separated values
+  #and the indices of columns to keep, and then returns a string 
+  #of comma separated values for only those entries that correspond
+  #to the column positions indicated in `keepCols`.
+  return(gsub("\\s", "", paste(strsplit(inputStr, ',')[[1]][keepCols], collapse=',')))
+}
+
+ScrunchCols <- function(dt, patternToMatch, colNameAppend) {
+  #Function to take values spread across multiple columns and 
+  #essentially ignore all the blank cells, effectively 'scrunching'
+  #them into 16 columns corresponding to the 16 articles subjects
+  #are presented in the survey.  The end result is a data table with
+  #responses neatly stacked on top of each other, as opposed to 
+  #scattered across multiple cells.
+  
+  #Get original column names from patternToMatch
+  origColNames <- grep(paste(patternToMatch), names(dt), value=TRUE)
+  
+  #Combine all of them into a single column (the 'scrunch' operation)
+  dt[, concatCol := do.call(paste, c(.SD, sep=',')), .SDcols=origColNames]
+  
+  #Replace pipes (if any) with commas. Pipes are only found in the _DO columns.
+  dt[, concatCol := gsub('\\|', ',', concatCol)]
+  
+  #Remove any multiple repeating commas (beginning and end)
+  dt[, concatCol := gsub('(,){2,}', '', concatCol)]
+  
+  #For the _DO columns, keep only columns with question codes (qCode)
+  #`keepCols` is hardcoded because the relative position of the questions
+  #is fixed at these positions.
+  if(colNameAppend=='_DO') {
+    if (attnChecks==F) {
+      keepCols <- c(2, 5, 8, 11, 15, 18, 21, 24, 28, 31, 34, 37, 41, 44, 47, 50)
+    } else {
+      keepCols <- c(2, 5, 8, 11, 16, 19, 22, 25, 33, 36, 39, 42, 50, 53, 56, 59)
+    }
+
+    dt[, concatCol := apply(.SD, 1, KeepColsFx, keepCols=keepCols), .SDcols=c('concatCol')]
+  }
+  
+  #Generate new column names (e.g., Q1_tone, Q2_tone, Q3_tone, etc.)
+  if(colNameAppend=='_ACTone') {
+    newColNames <- paste('Q',1:2, colNameAppend, sep='')
+  } else {
+    newColNames <- paste('Q',1:16, colNameAppend, sep='')
+  }
+  
+  #Generate new columns (tstrsplit function splits one column into several columns)
+  dt[, eval(newColNames) := tstrsplit(concatCol, ',', fixed=TRUE)]
+  
+  #Delete original columns (removes ~140 columns no longer used)
+  dt[, grep(patternToMatch, colnames(dt)):=NULL]
+  
+}
+
+#Execute our functions!
+
+#Patterns to search in column headers:  
+#1) Political Tone:  Begins with 'X' and contain 't'  |  REGEX = ^X.*t
+#2) Factualness:     Begins with 'X' and contain 'f'  |  REGEX = ^X.*f
+#3) Display Order:   Begins with 'X' and contain 'DO' |  REGEX = ^X.*DO
+
+ScrunchCols(dtRaw, '^X.*t', '_tone')
+ScrunchCols(dtRaw, '^X.*f', '_fact')
+ScrunchCols(dtRaw, '^X.*DO', '_DO')
+
+#Collect Attention Check Columns
+#These are correct, except that the columns are mislabeled
+#(wrong headers assigned the wrong columns)
+#So hard coding (ugh) instead
+colNums <- grep('AC1_t_q_5', names(dtRaw))
+colNums <- c(76, 96, 116, 136)
+dtRaw[, AC1_Tone:=do.call(paste0,.SD), .SDcols=colNums]
+
+colNums <- grep('AC1_f_q_5', names(dtRaw))
+colNums <- c(77, 97, 117, 137)
+dtRaw[, AC1_Fact:=do.call(paste0,.SD), .SDcols=colNums]
+
+colNums <- grep('AC2_t_q_5', names(dtRaw))
+colNums <- c(82, 102, 122, 142)
+dtRaw[, AC2_Tone:=do.call(paste0,.SD), .SDcols=colNums]
+
+colNums <- grep('AC2_f_q_5', names(dtRaw))
+colNums <- c(83, 103, 123, 143)
+dtRaw[, AC2_Fact:=do.call(paste0,.SD), .SDcols=colNums]
+
+#Tally correcrt AC scores
+#First set to 0, then add 1 for every correct response
+dtRaw[, AC_Num_Correct:=0]
+dtRaw[AC1_Tone=='Politically Neutral (Moderate)', AC_Num_Correct:=AC_Num_Correct+1]
+dtRaw[AC1_Fact=='Mostly factual', AC_Num_Correct:=AC_Num_Correct+1]
+dtRaw[AC2_Tone=='Very Liberal', AC_Num_Correct:=AC_Num_Correct+1]
+dtRaw[AC2_Fact=='Mostly opinionated', AC_Num_Correct:=AC_Num_Correct+1]
+
+#Convert Source to MTurkPolView
+dtRaw[Source %in% c('505050','515151','525252','535353'), MturkPolView := 'Liberal' ]
+dtRaw[Source %in% c('707070','717171','727272','737373'), MturkPolView := 'Conservative' ]
+
+### FLIGHT ORDER ###
+#We now need to code the order of the flights as a variable, using a similar
+#'scrunching' operation on the flight order columns. The operations required
+#for gathering flight order were suficiently different from the ScrunchCols
+#function to warrant writing them below as opposed to including them in
+#that function, despite the fact that some of the are the same.
+
+#Get original column names (easier just to list them instead of regex)
+origColNames <- c('FL_8_DO',
+                  'FL_9_DO',
+                  'FL_10_DO',
+                  'FL_11_DO'
+                  )
+
+#Combine all of them into a single column (the 'scrunch' operation)
+dtRaw[, concatCol := do.call(paste, c(.SD, sep=',')), .SDcols=origColNames]
+
+#Retain only the numbers (easy since they're all single digits)
+dtRaw[, concatCol := gsub('\\D+','',concatCol)]
+
+#Helper function to repeat each number 4 times
+QuadFx <- function (inputStr) {
+  
+  x <- strsplit(inputStr,'')
+  paste0(c(rep(x[[1]][1],4),
+           rep(x[[1]][2],4),
+           rep(x[[1]][3],4),
+           rep(x[[1]][4],4)
+           )
+         ,collapse=','
+         )
+}
+
+#Execute helper function
+dtRaw[, concatCol := apply(.SD, 1, QuadFx), .SDcols=c('concatCol')]
+
+#Generate new column names (e.g., Q1_tone, Q2_tone, Q3_tone, etc.)
+#_FO stands for Flight Order
+newColNames <- paste('Q',1:16, '_FO', sep='')
+  
+#Generate new columns (tstrsplit function splits one column into several columns)
+dtRaw[, eval(newColNames) := tstrsplit(concatCol, ',', fixed=TRUE)]
+
+```
+
+# Melt Data (Wide to Tall)
+
+This block takes the survey data and transforms it from its current form where survey responses are listed in separate columns in 'wide' format, with one column for each combination of question and randomization at the flight level, to a 'tall' format where our two potential outcome variables plus the question label are listed in only three columns, repeating the data of the other variables (covariates) for each outcome measurement.
+
+This code also joins simple lookup tables to convert the question code (`qCode`) to into the article topic, article type (news or opinion), and treatment variable.
+
+Finally, the code creates the political intensity variable from the political tone variable, and it alphabetizes both the political tone and intensity variables by prepending them with a number, necessary for ordinal regression in the analysis.
+
+```{r}
+### Convert wide to tall!
+
+#Identify patterns matching column headers to convert
+toMatch <- c('^Q.*_tone', '^Q.*_fact', '^Q.*_DO', '^Q.*_FO')
+
+#Gather column names that match our pattern
+colNames <- grep(paste(toMatch,collapse="|"), names(dtRaw), value=TRUE)
+
+#Make a data table out of the column names (for joining in next step)
+dtColNames <- data.table(qID=colNames)
+dtColNames[, variable:=seq(.N)]
+
+#Convert wide to tall based on patterns
+dt <- melt(dtRaw,
+           measure.vars = patterns(toMatch),
+           value.name = c('tone','fact','qCode','flightOrder')
+           )
+
+#JOIN ARTICLE LABELS, TOPICID, NEWS/OPINION, TREATMENT (LABEL)
+#Load files to join
+cstDataFile <- 'JoinQCode.csv'
+dtQCode <- fread(file=paste(cstDataFolder, cstDataFile, sep=''),
+               header=T
+               )
+cstDataFile <- 'JoinTopicID.csv'
+dtTopicID <- fread(file=paste(cstDataFolder, cstDataFile, sep=''),
+               header=T
+               )
+
+#Perform joins!
+dt <- dt[dtQCode, on=.(qCode=qCode)]
+dt <- dt[dtTopicID, on=.(topicID=topicID)]
+
+
+#Create Political Intensity Variable
+
+#First create table linking intensity to tone
+dtPoliInt <- data.table(tone=c('Very Liberal',
+                               'Liberal',
+                               'Slightly Liberal',
+                               'Politically Neutral (Moderate)',
+                               'Slightly Conservative',
+                               'Conservative',
+                               'Very Conservative'
+                               ),
+                        intensity=c('3_High',
+                                    '2_Medium',
+                                    '1_Low',
+                                    '0_Neutral',
+                                    '1_Low',
+                                    '2_Medium',
+                                    '3_High'
+                                    )
+                        )
+#Join to create political intensity
+dt <- dt[dtPoliInt, on=.(tone=tone)]
+
+#Alphabetize tone (required for ordinal regression with MASS::polr)
+dt[tone=='Very Liberal',                   tone:='01_Very Liberal']
+dt[tone=='Liberal',                        tone:='02_Liberal']
+dt[tone=='Slightly Liberal',               tone:='03_Slightly Liberal']
+dt[tone=='Politically Neutral (Moderate)', tone:='04_Neutral']
+dt[tone=='Slightly Conservative',          tone:='05_Slightly Conservative']
+dt[tone=='Conservative',                   tone:='06_Conservative']
+dt[tone=='Very Conservative',              tone:='07_Very Conservative']
+
+#Alphabetize factualness (required for ordinal regression with MASS::polr)
+dt[fact=='Mostly factual',       fact:='01_Mostly factual']
+dt[fact=='Somewhat factual',     fact:='02_Somewhat factual']
+dt[fact=='Somewhat opinionated', fact:='03_Somewhat opinionated']
+dt[fact=='Mostly opinionated',   fact:='04_Mostly opinionated']
+
+#Add column to name our treatment variable 'Control' and 'Treatment'
+dt[treat==0, Treatment:='Unlabeled']
+dt[treat==1, Treatment:='Labeled']
+
+#Change 'Op' to 'Opinion'
+dt[newsOp=='Op', newsOp:='Opinion']
+
+#Change column types as needed
+dt[, variable:=as.integer(variable)]
+dt[, Finished:=as.logical(Finished)]
+setnames(dt, old='Duration (in seconds)', new='Duration')
+dt[, Duration:=as.integer(Duration)]
+dt[, Progress:=as.integer(Progress)]
+dt[, FL_4_DO:=as.factor(FL_4_DO)]
+dt[, FL_8_DO:=as.factor(FL_8_DO)]
+dt[, FL_9_DO:=as.factor(FL_9_DO)]
+dt[, FL_10_DO:=as.factor(FL_10_DO)]
+dt[, FL_11_DO:=as.factor(FL_11_DO)]
+dt[, tone:=as.factor(tone)]
+dt[, fact:=as.factor(fact)]
+dt[, qCode:=as.factor(qCode)]
+dt[, flightOrder:=as.factor(flightOrder)]
+dt[, topicID:=as.factor(topicID)]
+dt[, newsOp:=as.factor(newsOp)]
+dt[, treat:=as.factor(treat)]
+dt[, topicName:=as.factor(topicName)]
+dt[, intensity:=as.factor(intensity)]
+dt[, Treatment:=as.factor(Treatment)]
+#We didn't collect demographics for Friends and Family, so only run these if not
+if(friendsAndFamily==F) {
+  dt[, gender:=as.factor(gender)]
+  dt[, age:=as.factor(age)]
+  dt[, reg_vote:=as.factor(reg_vote)]
+  dt[, race:=as.factor(race)]
+  dt[, income:=as.factor(income)]
+  dt[, education:=as.factor(education)]
+  dt[, pol_views:=as.factor(pol_views)]
+  dt[, pol_party:=as.factor(pol_party)]
+  dt[, Int_politics:=as.factor(Int_politics)]
+  dt[, pk_pres:=as.factor(pk_pres)]
+  dt[, pk_us_sen:=as.factor(pk_us_sen)]
+  dt[, pk_pol_office_1:=as.factor(pk_pol_office_1)]
+  dt[, pk_pol_office_2:=as.factor(pk_pol_office_2)]
+  dt[, pk_pol_office_3:=as.factor(pk_pol_office_3)]
+  dt[, pk_pol_office_4:=as.factor(pk_pol_office_4)]
+  dt[, use_reddit:=as.factor(use_reddit)]
+  dt[, use_soc_media:=as.factor(use_soc_media)]
+}
+
+#Inspect data table
+#dt[sample(.N,10)] #Commented out to save space when printing
+
+#Save the data to file
+cstDataFile <- 'POSurveyData.csv'
+fwrite(dt, file=paste(cstDataFolder, cstDataFile, sep=''))
+cstDataFile <- 'POSurveyData.rds'
+saveRDS(dt, file=paste(cstDataFolder, cstDataFile, sep=''))
+```
+
+# Punch List
+
+* Convert columns to appropriate types (e.g., POs to Factors)
+
+```{r}
+#AUDITS
+
+#How many items did users answer?  Should be 16.
+dtUserResponseCount <- dt[, .N, keyby=userID]
+
+#Source Codes Present (should only include 50, 51, 52, 70, 71, 72, 30, 31)
+dtSources <- dt[, .N/16, keyby=Source]
+
+#Distribution of right/wrong Attention Checks
+dtACCheck <- dtRaw[, .(Count=.N), keyby=AC_Num_Correct][, Percent:=Count/sum(Count)]
+```
+
+```{r}
+#TESTING
+# KeepColsFx <- function(inputStr) {
+#   gsub("\\s", "", paste(strsplit(inputStr, ',')[[1]][y], collapse=','))
+# }
+# 
+# z <- KeepColsFx("X1-AR Transition,2_O,X1-AR_t_q_1,X1-AR_f_q_1,3_N,X1-AR_t_q_2,X1-AR_f_q_2,4_N,X1-AR_t_q_3,X1-AR_f_q_3,1_O,X1-AR_t_q_4,X1-AR_f_q_4,X2-A transition,2_N_Lab,X2-A_t_q_1,X2-A_f_q_1,1_N_Lab,X2-A_t_q_2,X2-A_f_q_2,3_O ,X2-A_t_q_3,X2-A_f_q_3,4_O,X2-A_t_q_4,X2-A_f_q_4,X3-BR transition,7_N_Lab,X3-BR_t_q_1,X3-BR_f_q_1,5_O,X3-BR_t_q_2,X3-BR_f_q_2,8_N_Lab,X3-BR_t_q_3,X3-BR_f_q_3,6_O ,X3-BR_t_q_4,X3-BR_f_q_4,X4-B Transition,7_O_Lab,X4-B_t_q_1,X4-B_f_q_1,5_N_Lab,X4-B_t_q_2,X4-B_f_q_2,6_N_Lab,X4-B_t_q_3,X4-B_f_q_3,8_O_Lab ,X4-B_t_q_4,X4-B_f_q_4")
+# z
+```
+
