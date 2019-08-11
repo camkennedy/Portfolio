@@ -2,7 +2,7 @@
 
 Web app that uses data science to impact the opioid crisis by enabling physicians to make more informed decisions about prescribing opioids.  Patients submit responses to ~25 demographic and health questions, which triggers the pipeline to produce a report that provides their personalized probability of opioid misuse, their percentile of misuse among all patients, and the impact that each of their responses has on their risk score.  A calibrated XG Boost model produces the risk score, with Shapley values generating the contributions of individualized risk factors.
 
-Here are the key files of the project.
+Here are descriptions for the project's key files.
 
 * **`NSDUH-2017-DS0001-info-codebook.pdf`**: This PDF file is the National Survey on Drug Use and Health codebook that contains all the variable names and details of the survey.
 * **`Opioid_01LoadData.ipynb`**: This brief file loads `data.pickle.zip` and adds the outcome variable for Opioid Misuse, saving its output to `./data/misuse.pickle.zip`
